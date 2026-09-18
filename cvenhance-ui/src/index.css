@@ -1,0 +1,153 @@
+@import "tailwindcss";
+
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+:root {
+  --background: #f5f4ee;
+  --foreground: #1f1e1d;
+  --card: #ffffff;
+  --muted: #ecebe3;
+  --muted-foreground: #6b6a65;
+  --border: #e5e3dc;
+  --accent: #c96442;
+  --accent-hover: #b5573a;
+  --accent-foreground: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1f1e1d;
+    --foreground: #eceae3;
+    --card: #262624;
+    --muted: #2c2b28;
+    --muted-foreground: #a3a199;
+    --border: #3a3a36;
+    --accent: #d97757;
+    --accent-hover: #e08968;
+    --accent-foreground: #1f1e1d;
+  }
+}
+
+@theme inline {
+  --font-sans: "Inter", "Plus Jakarta Sans", "Satoshi", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Inter", "Plus Jakarta Sans", "Satoshi", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Newsreader", Georgia, "Times New Roman", serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  min-height: 100vh;
+  font-size: 17px;
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  color-scheme: light dark;
+}
+
+body {
+  position: relative;
+  background-color: var(--background);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.notification-track {
+  width: max-content;
+  animation: ticker-scroll 24s linear infinite;
+}
+
+.home-page-hero-bg {
+  background-size: 100% auto;
+  background-position: top center;
+  background-repeat: no-repeat;
+}
+
+.editor-header-bg {
+  background-color: var(--card);
+}
+
+@media (max-width: 640px) {
+  .home-page-hero-bg {
+    background-size: cover;
+    background-position: center top;
+    background-color: rgba(255, 255, 255, 0.241);
+    background-blend-mode: lighten;
+  }
+}
+
+.ray-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ray-bg::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 200%;
+  height: 160%;
+  background: conic-gradient(
+    from 250deg at 50% 0%,
+    transparent 0deg,
+    rgba(186, 230, 253, 0.25) 10deg,
+    transparent 20deg,
+    rgba(186, 230, 253, 0.2) 30deg,
+    transparent 40deg,
+    rgba(199, 210, 254, 0.18) 52deg,
+    transparent 62deg,
+    rgba(186, 230, 253, 0.15) 72deg,
+    transparent 82deg,
+    rgba(199, 210, 254, 0.12) 92deg,
+    transparent 102deg,
+    rgba(186, 230, 253, 0.1) 112deg,
+    transparent 122deg
+  );
+}
+
+.card-light {
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.07), 0 1px 2px -1px rgba(0, 0, 0, 0.07);
+}
+
+.form-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.07),
+    0 2px 4px -2px rgba(0, 0, 0, 0.07);
+}

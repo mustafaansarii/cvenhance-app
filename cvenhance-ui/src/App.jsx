@@ -1,0 +1,88 @@
+import { useEffect, useState } from 'react';
+import { Route, Routes, useLocation } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+import './index.css';
+
+import PrivateRoute from './components/route-manage/PrivateRoute';
+import HomePage from './pages/HomePage';
+import ProfilePage from './pages/ProfilePage';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
+import Footer from './components/footer/Footer';
+import DocEditor from './pages/DocEditor';
+import NotFound from './components/not-found/NotFound';
+import authService from './services/auth.service';
+import ContactUsPage from './pages/contact-us';
+import PricingPage from './pages/pricing';
+import TermsPage from './pages/terms';
+import RefundPolicyPage from './pages/refund-policy';
+import PrivacyPolicyPage from './pages/privacy-policy';
+import ResumeCheckerPage from './pages/resume-checker';
+import ComingSoon from './pages/ComingSoon';
+import DocTemplates from './pages/DocTemplates';
+import LatexTemplates from './pages/LatexTemplates';
+import MyTemplates from './pages/MyTemplates';
+import ResumeBuilder from './pages/ResumeBuilder';
+import InternalPage from './pages/InternalPage';
+import ResumeUploadPrompt from './components/profile/ResumeUploadPrompt';
+import PrivacyConsentBanner from './components/shared/PrivacyConsentBanner';
+
+function App() {
+  const location = useLocation();
+  const isEditor = location.pathname.startsWith('/doc-editor') || location.pathname.startsWith('/resume-builder');
+  const noFooterPaths = ['/login', '/signup'];
+  const hideFooter = isEditor || noFooterPaths.includes(location.pathname) || location.pathname.startsWith('/resume-checker/');
+
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    authService.verifyAuth().finally(() => setAuthReady(true));
+  }, []);
+
+  if (!authReady) return null;
+
+  return (
+    <div className="min-h-screen text-black dark:text-white">
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          style: {
+            background: '#0f172a',
+            color: '#f8fafc',
+            borderRadius: '10px',
+            fontSize: '13px',
+          },
+        }}
+      />
+      <ResumeUploadPrompt />
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/contact-us" element={<ContactUsPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/refund-policy" element={<RefundPolicyPage />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/resume-checker" element={<ResumeCheckerPage />} />
+        <Route path="/resume-checker/:id" element={<ResumeCheckerPage />} />
+        <Route path="/interview-prep" element={<ComingSoon breadcrumb="Job Search" title="Interview Prep" description="Practice with AI mock interviews and get instant feedback." />} />
+        <Route path="/job-tracker" element={<ComingSoon breadcrumb="Job Search" title="Job Tracker" description="Organize all your applications in one place." />} />
+        <Route path="/job-board" element={<ComingSoon breadcrumb="Job Search" title="Job Board" description="Find roles that match your skills and experience." />} />
+        <Route path="/templates" element={<DocTemplates />} />
+        <Route path="/latex-templates" element={<LatexTemplates />} />
+
+        <Route path="/resume-builder/:code" element={<PrivateRoute> <ResumeBuilder /> </PrivateRoute>} />
+        <Route path="/my-templates" element={<PrivateRoute> <MyTemplates/> </PrivateRoute>} />
+        <Route path="/doc-editor/:id" element={<PrivateRoute> <DocEditor/></PrivateRoute>} />
+        <Route path="/profile" element={<PrivateRoute><ProfilePage/></PrivateRoute>} />
+        <Route path="/internal" element={<PrivateRoute><InternalPage/></PrivateRoute>} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+      {!hideFooter && <Footer />}
+      <PrivacyConsentBanner />
+    </div>
+  );
+}
+
+export default App;

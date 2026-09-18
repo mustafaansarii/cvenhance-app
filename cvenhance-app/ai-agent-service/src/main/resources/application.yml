@@ -1,0 +1,64 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: AI-AGENT-SERVICE
+  datasource:
+    url: jdbc:postgresql://postgres:5432/cvenhance?currentSchema=ai_agent_schema
+    username: ${DATABASE_USERNAME:cvenhance}
+    password: ${DATABASE_PASSWORD:cvenhance}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  ai:
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY:dummy-key}
+        chat:
+          options:
+            model: gemini-flash-latest
+
+auth:
+  jwt:
+    secret: ${JWT_SECRET:8993f19ed1d6688d0cc4a266858e72efcc165e100f91abdb228b375b42d2a451}
+    expiry-ms: 3600000
+  cookie:
+    name: ACCESS_TOKEN
+    secure: false
+    same-site: Lax
+    path: /
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+ai:
+  primary-provider: ${AI_PRIMARY_PROVIDER:openrouter}
+  openrouter:
+    api-key: ${OPENROUTER_API_KEY:}
+    base-url: https://openrouter.ai/api
+    model: openrouter/free
+  groq:
+    api-key: ${GROQ_API_KEY:}
+    base-url: https://api.groq.com/openai
+    model: openai/gpt-oss-120b
+
+storage:
+  s3:
+    bucket: ${S3_BUCKET:resume_pdf}
+    endpoint: ${S3_ENDPOINT:}
+    region: ${S3_REGION:ap-south-1}
+    access-key: ${S3_ACCESS_KEY:}
+    secret-key: ${S3_SECRET_KEY:}
+
+upstash:
+  redis:
+    rest-url: ${UPSTASH_REDIS_REST_URL:}
+    rest-token: ${UPSTASH_REDIS_REST_TOKEN:}
+
+services:
+  auth-service:
+    url: ${AUTH_SERVICE_URL:http://localhost:8081}
+  subscription-service:
+    url: ${SUBSCRIPTION_SERVICE_URL:http://localhost:8083}

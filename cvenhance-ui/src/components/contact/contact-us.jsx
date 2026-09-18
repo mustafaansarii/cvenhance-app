@@ -1,0 +1,84 @@
+import { useState } from 'react';
+import toast from 'react-hot-toast';
+import contactService from '../../services/contact.service';
+
+const SUPPORT_EMAIL = 'support.cvenhance@gmail.com';
+const SUPPORT_PHONE = '+91 62013 02988';
+
+export default function ContactUs() {
+    const [form, setForm] = useState({ name: '', email: '', message: '' });
+    const [sending, setSending] = useState(false);
+
+    const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+    const onSubmit = async (e) => {
+        e.preventDefault();
+        if (!form.name.trim() || !form.email.trim() || !form.message.trim()) {
+            toast.error('Please fill in your name, email, and query');
+            return;
+        }
+        setSending(true);
+        try {
+            const res = await contactService.submit(form);
+            toast.success(res?.message || 'Your message has been sent. We’ll get back to you soon.');
+            setForm({ name: '', email: '', message: '' });
+        } catch (err) {
+            toast.error(err?.response?.data?.message || 'Could not send your message. Please try again.');
+        } finally {
+            setSending(false);
+        }
+    };
+
+    const inputClass = 'w-full rounded-xl border border-border px-4 py-2.5 text-sm text-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40';
+
+    return (
+        <main className="mx-auto max-w-2xl px-4 py-12 sm:px-6 lg:px-8">
+            <section className="border border-border bg-card p-6 shadow-sm sm:p-8">
+                <h2 className="text-lg font-bold text-foreground">Ask a query</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Have a question? Send it over and we&rsquo;ll get back to you.</p>
+
+                <form onSubmit={onSubmit} className="mt-6 space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <label className="mb-1 block text-xs font-semibold text-muted-foreground">Name</label>
+                            <input value={form.name} onChange={set('name')} placeholder="Your name" className={inputClass} />
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-xs font-semibold text-muted-foreground">Email</label>
+                            <input type="email" value={form.email} onChange={set('email')} placeholder="you@example.com" className={inputClass} />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="mb-1 block text-xs font-semibold text-muted-foreground">Your query</label>
+                        <textarea value={form.message} onChange={set('message')} rows={5} placeholder="How can we help?" className={`${inputClass} resize-y`} />
+                    </div>
+                    <button type="submit" disabled={sending} className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-2.5 text-sm font-semibold text-accent-foreground shadow-sm transition hover:bg-accent-hover disabled:opacity-60">
+                        {sending ? 'Sending…' : 'Send query'}
+                        {!sending && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 6l6 6-6 6" /></svg>}
+                    </button>
+                </form>
+            </section>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <a href={`tel:${SUPPORT_PHONE.replace(/\s/g, '')}`} className="flex items-center gap-3 border border-border bg-card px-5 py-4 transition hover:border-accent">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h2.6a1 1 0 01.97.757l1 4a1 1 0 01-.29.96l-1.6 1.6a13 13 0 006 6l1.6-1.6a1 1 0 01.96-.29l4 1a1 1 0 01.76.97V19a2 2 0 01-2 2A16 16 0 013 5z" /></svg>
+                    </span>
+                    <span className="min-w-0">
+                        <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Phone</span>
+                        <span className="block text-sm font-medium text-foreground">{SUPPORT_PHONE}</span>
+                    </span>
+                </a>
+                <a href={`mailto:${SUPPORT_EMAIL}`} className="flex items-center gap-3 border border-border bg-card px-5 py-4 transition hover:border-accent">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16v12H4V6zm0 1l8 6 8-6" /></svg>
+                    </span>
+                    <span className="min-w-0">
+                        <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email</span>
+                        <span className="block truncate text-sm font-medium text-foreground">{SUPPORT_EMAIL}</span>
+                    </span>
+                </a>
+            </div>
+        </main>
+    );
+}

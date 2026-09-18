@@ -1,0 +1,92 @@
+package com.cvenhance.doc.service;
+
+import com.cvenhance.doc.dto.constants.DocTemplateStatus;
+import com.cvenhance.doc.entity.DocTemplate;
+import com.cvenhance.doc.repo.DocTemplateRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+
+
+@Component
+public class DocTemplateCompiler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DocTemplateCompiler.class);
+    private static final int MAX_ERROR_LENGTH = 2000;
+    private static final int BATCH_SIZE = 5;
+    private static final Duration STALE_COMPILING = Duration.ofMinutes(5);
+
+    @Autowired
+    private DocTemplateRepository docTemplateRepository;
+
+    @Autowired
+    private LatexCompiler latexCompiler;
+
+    public void compilePending() {
+        List<DocTemplate> batch = docTemplateRepository.findCompilable(
+                DocTemplateStatus.PENDING,
+                DocTemplateStatus.COMPILING,
+                Instant.now().minus(STALE_COMPILING),
+                PageRequest.of(0, BATCH_SIZE));
+        for (DocTemplate template : batch) {
+            process(template);
+        }
+    }
+
+    private void process(DocTemplate template) {
+        claim(template);
+        RenderResult result = render(template);
+        persistOutcome(template, result);
+    }
+
+    private void claim(DocTemplate template) {
+        template.setStatus(DocTemplateStatus.COMPILING);
+        docTemplateRepository.save(template);
+    }
+
+    private RenderResult render(DocTemplate template) {
+        try {
+            latexCompiler.compile(template.getLatexCode());
+            return RenderResult.ok();
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Template {} ({}) failed to compile: {}", template.getId(), template.getName(),
+                    exception.getMessage());
+            return RenderResult.failed(truncate(exception.getMessage()));
+        }
+    }
+
+    /** Persistence only: write the render outcome back to the template. */
+    private void persistOutcome(DocTemplate template, RenderResult result) {
+        if (result.ready()) {
+            template.setStatus(DocTemplateStatus.READY);
+            template.setErrorMessage(null);
+        } else {
+            template.setStatus(DocTemplateStatus.FAILED);
+            template.setErrorMessage(result.error());
+        }
+        docTemplateRepository.save(template);
+    }
+
+    private String truncate(String message) {
+        if (message == null) {
+            return "Unknown error";
+        }
+        return message.length() <= MAX_ERROR_LENGTH ? message : message.substring(0, MAX_ERROR_LENGTH);
+    }
+
+    private record RenderResult(boolean ready, String error) {
+        static RenderResult ok() {
+            return new RenderResult(true, null);
+        }
+
+        static RenderResult failed(String error) {
+            return new RenderResult(false, error);
+        }
+    }
+}

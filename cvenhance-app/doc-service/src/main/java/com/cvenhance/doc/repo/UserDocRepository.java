@@ -1,0 +1,41 @@
+package com.cvenhance.doc.repo;
+
+import com.cvenhance.doc.dto.constants.DocType;
+import com.cvenhance.doc.entity.UserDoc;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.Optional;
+
+public interface UserDocRepository extends JpaRepository<UserDoc, Long> {
+
+    Optional<UserDoc> findByIdAndOwnerEmail(Long id, String ownerEmail);
+
+    Optional<UserDoc> findFirstByOwnerEmailAndTemplateCode(String ownerEmail, String templateCode);
+
+    Optional<UserDoc> findFirstByOwnerEmailAndBuilderDocId(String ownerEmail, Long builderDocId);
+
+    @Query("""
+            SELECT d FROM UserDoc d
+            WHERE d.ownerEmail = :ownerEmail
+              AND (:keyword IS NULL OR :keyword = ''
+                   OR LOWER(d.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                   OR LOWER(COALESCE(d.description, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))
+              AND (:type IS NULL OR d.type = :type)
+            """)
+    Page<UserDoc> getUserDocs(@Param("ownerEmail") String ownerEmail, @Param("keyword") String keyword,
+                         @Param("type") DocType type, Pageable pageable);
+
+    @Query("""
+            SELECT d FROM UserDoc d
+            WHERE (:keyword IS NULL OR :keyword = ''
+                   OR LOWER(d.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                   OR LOWER(d.ownerEmail) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                   OR LOWER(COALESCE(d.templateCode, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))
+              AND (:type IS NULL OR d.type = :type)
+            """)
+    Page<UserDoc> searchAll(@Param("keyword") String keyword, @Param("type") DocType type, Pageable pageable);
+}

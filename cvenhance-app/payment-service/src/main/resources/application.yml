@@ -1,0 +1,41 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: PAYMENT-SERVICE
+  datasource:
+    url: jdbc:postgresql://postgres:5432/cvenhance?currentSchema=payment_schema
+    username: ${DATABASE_USERNAME:cvenhance}
+    password: ${DATABASE_PASSWORD:cvenhance}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+cashfree:
+  app:
+    id: ${CASHFREE_APP_ID:dummy_app_id}
+  secret:
+    key: ${CASHFREE_SECRET_KEY:dummy_secret}
+  environment: ${CASHFREE_ENV:SANDBOX}
+  api-version: 2023-08-01
+  return-url: ${CASHFREE_RETURN_URL:https://cvenhance.in/payment/status?order_id={order_id}}
+
+auth:
+  jwt:
+    secret: ${JWT_SECRET:dGhpcy1pcy1hLXZlcnktc2VjdXJlLWtleS1mb3Itand0LXZhbGlkYXRpb24tb25seQ==}
+    expiry-ms: 86400000
+  cookie:
+    name: JWT_TOKEN
+    domain: localhost
+    path: /
+    secure: false
+    http-only: true
+    same-site: Lax
+
+cors:
+  allowed-origins: http://localhost:3000
+  allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+  allowed-headers: "*"
+  allow-credentials: true

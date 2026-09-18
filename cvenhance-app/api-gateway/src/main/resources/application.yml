@@ -1,0 +1,76 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: API-GATEWAY
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          globalcors:
+            corsConfigurations:
+              '[/**]':
+                allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+                allowedMethods:
+                  - GET
+                  - POST
+                  - PUT
+                  - PATCH
+                  - DELETE
+                  - OPTIONS
+                allowedHeaders: "*"
+                allowCredentials: true
+
+          routes:
+            - id: auth-service
+              uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/auth/**, /oauth2/**, /login/oauth2/**, /api/contact/**
+
+            - id: payment-service
+              uri: ${PAYMENT_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/payments/**
+
+            - id: subscription-service
+              uri: ${SUBSCRIPTION_SERVICE_URL:http://localhost:8083}
+              predicates:
+                - Path=/api/me/entitlement, /api/subscriptions/**
+
+            - id: doc-service
+              uri: ${DOC_SERVICE_URL:http://localhost:8084}
+              predicates:
+                - Path=/api/user-docs/**, /api/admin/doc-templates/**, /api/resume-builder/**, /api/admin/templates, /api/admin/user-docs
+
+            - id: ai-agent-service
+              uri: ${AI_SERVICE_URL:http://localhost:8085}
+              predicates:
+                - Path=/api/ai/**, /api/profile/**
+
+            - id: admin-users-auth
+              uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/admin/users/**, /api/admin/audit-events
+
+            - id: health-check
+              uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/health
+
+            - id: swagger-docs
+              uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/v3/api-docs/**, /swagger-ui/**, /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:ERROR}
+    org.springframework.cloud.gateway: ${LOG_LEVEL_GATEWAY:INFO}

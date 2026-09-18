@@ -1,0 +1,44 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: DOC-SERVICE
+  datasource:
+    url: jdbc:postgresql://postgres:5432/cvenhance?currentSchema=doc_schema
+    username: ${DATABASE_USERNAME:cvenhance}
+    password: ${DATABASE_PASSWORD:cvenhance}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+auth:
+  jwt:
+    secret: ${JWT_SECRET:verylongsecretkeythatisatleast256bitslong}
+    expiry-ms: 3600000
+  cookie:
+    name: ACCESS_TOKEN
+    secure: false
+    same-site: Lax
+    path: /
+
+storage:
+  s3:
+    bucket: ${S3_BUCKET:resume_pdf}
+    endpoint: ${S3_ENDPOINT:}
+    region: ${S3_REGION:ap-south-1}
+    access-key: ${S3_ACCESS_KEY:}
+    secret-key: ${S3_SECRET_KEY:}
+
+latex:
+  compiler: ${LATEX_COMPILER:docker}
+  docker-image: texlive/texlive:latest
+  compile-timeout-seconds: 120
+
+doc-templates:
+  compile-poll-ms: 15000
+  compile-initial-ms: 8000
+
+cors:
+  allowed-origins: ${FRONTEND_URL:http://localhost:5173}

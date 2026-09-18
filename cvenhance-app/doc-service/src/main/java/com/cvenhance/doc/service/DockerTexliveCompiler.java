@@ -1,0 +1,120 @@
+package com.cvenhance.doc.service;
+
+import com.cvenhance.doc.config.AppProperties;
+import com.cvenhance.common.exception.ApiException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+
+@Service
+@ConditionalOnProperty(name = "latex.compiler", havingValue = "docker", matchIfMissing = true)
+public class DockerTexliveCompiler implements LatexCompiler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DockerTexliveCompiler.class);
+    private static final String TEX_FILE = "main.tex";
+    private static final String PDF_FILE = "main.pdf";
+
+    @Autowired
+    private AppProperties appProperties;
+
+    @Override
+    public byte[] compile(String latexCode) {
+        Path workDir = createWorkDir();
+        try {
+            Path texFile = workDir.resolve(TEX_FILE);
+            Files.writeString(texFile, latexCode, StandardCharsets.UTF_8);
+
+            texFile.toFile().setReadable(true, false);
+            texFile.toFile().setWritable(true, false);
+            String output = runPdflatex(workDir);
+            if (needsRerun(output)) {
+                output = runPdflatex(workDir);
+            }
+            Path pdf = workDir.resolve(PDF_FILE);
+            if (!Files.exists(pdf)) {
+                LOGGER.error("LaTeX produced no PDF:\n{}", output);
+                throw ApiException.badData(LatexCompiler.summarizeError(output));
+            }
+            return Files.readAllBytes(pdf);
+        } catch (IOException exception) {
+            throw ApiException.badData("LaTeX compilation failed: " + exception.getMessage());
+        } finally {
+            deleteQuietly(workDir);
+        }
+    }
+
+    private String runPdflatex(Path workDir) {
+
+        String volumeMount = workDir.toAbsolutePath() + ":/work:z";
+        List<String> command = List.of(
+                "docker", "run", "--rm",
+                "-v", volumeMount,
+                "-w", "/work",
+                appProperties.getLatexDockerImage(),
+                "pdflatex", "-interaction=nonstopmode", "-halt-on-error", TEX_FILE);
+        try {
+            ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
+            Process process = builder.start();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            boolean finished = process.waitFor(appProperties.getLatexCompileTimeoutSeconds(), TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw ApiException.badData("LaTeX compilation timed out after "
+                        + appProperties.getLatexCompileTimeoutSeconds() + "s");
+            }
+            if (process.exitValue() != 0) {
+                LOGGER.error("pdflatex failed (exit {}):\n{}", process.exitValue(), output);
+                throw ApiException.badData(LatexCompiler.summarizeError(output));
+            }
+            return output;
+        } catch (IOException exception) {
+            throw ApiException.badData("Could not start the LaTeX compiler (is Docker running?): "
+                    + exception.getMessage());
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw ApiException.badData("LaTeX compilation was interrupted");
+        }
+    }
+
+    private boolean needsRerun(String output) {
+        return Objects.nonNull(output) && output.contains("Rerun");
+    }
+
+    private Path createWorkDir() {
+        try {
+            Path dir = Files.createTempDirectory("latex-");
+
+            dir.toFile().setWritable(true, false);
+            dir.toFile().setReadable(true, false);
+            dir.toFile().setExecutable(true, false);
+            return dir;
+        } catch (IOException exception) {
+            throw ApiException.badData("Could not create a workspace for compilation: " + exception.getMessage());
+        }
+    }
+
+    private void deleteQuietly(Path dir) {
+        try (var paths = Files.walk(dir)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException ignored) {
+                    LOGGER.debug("Could not delete temp file {}", path);
+                }
+            });
+        } catch (IOException ignored) {
+            LOGGER.debug("Could not clean temp dir {}", dir);
+        }
+    }
+}

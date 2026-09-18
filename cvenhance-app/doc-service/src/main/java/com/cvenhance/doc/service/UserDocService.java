@@ -1,0 +1,224 @@
+package com.cvenhance.doc.service;
+
+import com.cvenhance.common.audit.Auditable;
+import com.cvenhance.common.audit.AuditAction;
+import com.cvenhance.doc.dto.constants.DocTemplateStatus;
+import com.cvenhance.doc.dto.constants.DocType;
+import com.cvenhance.doc.entity.DocTemplate;
+import com.cvenhance.doc.entity.UserDoc;
+import com.cvenhance.common.exception.ApiException;
+import com.cvenhance.doc.repo.DocTemplateRepository;
+import com.cvenhance.doc.repo.UserDocRepository;
+import com.cvenhance.doc.client.SubscriptionServiceClient;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
+import java.util.Objects;
+import java.util.concurrent.Semaphore;
+
+@Service
+public class UserDocService {
+
+    private static final int MAX_ERROR_LENGTH = 2000;
+    private static final String COMPILED_CACHE_PREFIX = "compiled/";
+    private static final String PREVIEW_CACHE_PREFIX = "preview/";
+
+
+    private final Semaphore compileLock = new Semaphore(1);
+
+    @Autowired
+    private UserDocRepository userDocRepository;
+
+    @Autowired
+    private DocTemplateRepository docTemplateRepository;
+
+    @Autowired
+    private LatexCompiler latexCompiler;
+
+    @Autowired
+    private StorageService storageService;
+
+    @Autowired
+    private SubscriptionServiceClient subscriptionServiceClient;
+
+    @Autowired
+    private WatermarkService watermarkService;
+
+    @Transactional
+    public UserDoc saveTemplateToAccount(String ownerEmail, Long templateId) {
+        DocTemplate template = docTemplateRepository.findById(templateId)
+                .orElseThrow(() -> ApiException.notFound("Doc template not found: " + templateId));
+        return findOrCreateForTemplate(ownerEmail, template);
+    }
+
+    @Transactional
+    public UserDoc openByTemplateCode(String ownerEmail, String templateCode) {
+        DocTemplate template = docTemplateRepository.findFirstByTemplateCode(templateCode)
+                .orElseThrow(() -> ApiException.notFound("Doc template not found: " + templateCode));
+        return findOrCreateForTemplate(ownerEmail, template);
+    }
+
+    @Transactional
+    @Auditable(action = AuditAction.TEMPLATE_CLAIMED, actor = "#ownerEmail",
+            targetType = "USER_DOC", targetId = "#id")
+    public void claim(String ownerEmail, Long id) {
+        UserDoc doc = getOwned(ownerEmail, id);
+        if (!isFree(doc) && !subscriptionServiceClient.unlock(ownerEmail, doc.resumeKey())) {
+            throw ApiException.paymentRequired("Upgrade your plan to download this resume");
+        }
+    }
+
+    private boolean isFree(UserDoc doc) {
+        return doc.isFree() || docTemplateRepository.findFirstByTemplateCode(doc.getTemplateCode())
+                .map(t -> t.getSubscriptionType() == com.cvenhance.doc.dto.constants.SubscriptionType.FREE)
+                .orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<UserDoc> getUserDocs(String ownerEmail, String keyword, DocType type, Pageable pageable) {
+        return userDocRepository.getUserDocs(ownerEmail, keyword, type, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public UserDoc getOwned(String ownerEmail, Long id) {
+        return userDocRepository.findByIdAndOwnerEmail(id, ownerEmail)
+                .orElseThrow(() -> ApiException.notFound("Doc not found: " + id));
+    }
+
+    @Transactional
+    public byte[] compileAndUpdate(String ownerEmail, Long id, String latexCode) {
+        UserDoc doc = getOwned(ownerEmail, id);
+        doc.setLatexCode(latexCode);
+        return renderAndStore(doc, isFree(doc) || subscriptionServiceClient.isUnlocked(ownerEmail, doc.resumeKey()));
+    }
+
+    @Transactional
+    @Auditable(action = AuditAction.TEMPLATE_UNLOCKED, actor = "#ownerEmail",
+            targetType = "USER_DOC", targetId = "#id")
+    public byte[] unlockAndCompile(String ownerEmail, Long id) {
+        UserDoc doc = getOwned(ownerEmail, id);
+        if (!isFree(doc) && !subscriptionServiceClient.unlock(ownerEmail, doc.resumeKey())) {
+            throw ApiException.paymentRequired("Upgrade your plan to download this resume");
+        }
+        return renderAndStore(doc, true);
+    }
+
+//-----------------------------------private methods-----------------------------------
+
+    private byte[] renderAndStore(UserDoc doc, boolean full) {
+        try {
+            String hash = sha256(doc.getLatexCode());
+            String key = (full ? COMPILED_CACHE_PREFIX : PREVIEW_CACHE_PREFIX) + hash + ".pdf";
+            byte[] output = full ? compiledPdf(doc.getLatexCode(), hash) : previewPdf(doc.getLatexCode(), hash);
+            doc.setPdfUrl(storageService.publicUrl(key));
+            doc.setStatus(DocTemplateStatus.READY);
+            doc.setErrorMessage(null);
+            userDocRepository.save(doc);
+            return output;
+        } catch (RuntimeException exception) {
+            doc.setStatus(DocTemplateStatus.FAILED);
+            doc.setErrorMessage(truncate(exception.getMessage()));
+            userDocRepository.save(doc);
+            throw exception;
+        }
+    }
+
+
+    private byte[] compiledPdf(String latexCode, String hash) {
+        String key = COMPILED_CACHE_PREFIX + hash + ".pdf";
+        byte[] cached = storageService.download(key);
+        if (hasContent(cached)) {
+            return cached;
+        }
+        return compileAndCache(latexCode, key);
+    }
+
+    private byte[] previewPdf(String latexCode, String hash) {
+        String key = PREVIEW_CACHE_PREFIX + hash + ".pdf";
+        byte[] cached = storageService.download(key);
+        if (hasContent(cached)) {
+            return cached;
+        }
+        byte[] preview = watermarkService.buildPreview(compiledPdf(latexCode, hash));
+        storageService.upload(preview, key, "application/pdf");
+        return preview;
+    }
+
+    private byte[] compileAndCache(String latexCode, String cacheKey) {
+        try {
+            compileLock.acquire();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw ApiException.badData("Compilation was interrupted while queued");
+        }
+        try {
+            byte[] cached = storageService.download(cacheKey);
+            if (hasContent(cached)) {
+                return cached;
+            }
+            byte[] compiled = latexCompiler.compile(latexCode);
+            storageService.upload(compiled, cacheKey, "application/pdf");
+            return compiled;
+        } finally {
+            compileLock.release();
+        }
+    }
+
+    private boolean hasContent(byte[] bytes) {
+        return Objects.nonNull(bytes) && bytes.length > 0;
+    }
+
+    private String sha256(String value) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available", exception);
+        }
+    }
+
+    private String truncate(String message) {
+        if (Objects.isNull(message)) {
+            return "Unknown error";
+        }
+        return message.length() <= MAX_ERROR_LENGTH ? message : message.substring(0, MAX_ERROR_LENGTH);
+    }
+    
+    public UserDoc findOrCreateForTemplate(String ownerEmail, DocTemplate template) {
+        if (Objects.nonNull(template.getTemplateCode())) {
+            UserDoc existing = userDocRepository
+                    .findFirstByOwnerEmailAndTemplateCode(ownerEmail, template.getTemplateCode())
+                    .orElse(null);
+            if (Objects.nonNull(existing)) {
+                // keep the FREE/PAID snapshot in sync with the current template
+                if (existing.getSubscriptionType() != template.getSubscriptionType()) {
+                    existing.setSubscriptionType(template.getSubscriptionType());
+                    userDocRepository.save(existing);
+                }
+                return existing;
+            }
+        }
+
+        UserDoc doc = new UserDoc();
+        doc.setOwnerEmail(ownerEmail);
+        doc.setSourceTemplateId(template.getId());
+        doc.setTemplateCode(template.getTemplateCode());
+        doc.setName(template.getName());
+        doc.setType(template.getType());
+        doc.setSubscriptionType(template.getSubscriptionType());
+        doc.setDescription(template.getDescription());
+        doc.setLatexCode(template.getLatexCode());
+        doc.setImageUrl(template.getImageUrl());
+        doc.setStatus(DocTemplateStatus.READY);
+        return userDocRepository.save(doc);
+    }
+
+}
+

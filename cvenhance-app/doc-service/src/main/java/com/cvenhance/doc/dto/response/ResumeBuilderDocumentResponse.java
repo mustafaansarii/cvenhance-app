@@ -1,0 +1,23 @@
+package com.cvenhance.doc.dto.response;
+
+import com.cvenhance.doc.dto.constants.SubscriptionType;
+import com.fasterxml.jackson.databind.JsonNode;
+import lombok.Builder;
+import lombok.Data;
+
+import java.time.Instant;
+
+@Data
+@Builder
+public class ResumeBuilderDocumentResponse {
+    private Long id;
+    private String templateCode;
+    private int templateVersion;
+    private String name;
+    private JsonNode sectionOrder;
+    private JsonNode editorSettings;
+    private boolean unlocked;
+    private SubscriptionType subscriptionType;
+    private Instant createdAt;
+    private Instant updatedAt;
+}
